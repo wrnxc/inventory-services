@@ -1,0 +1,792 @@
+openapi: 3.0.3
+info:
+  title: Inventory Service API
+  version: 1.0.0
+  description: API contract for the inventory service MVP.
+
+servers:
+  - url: http://localhost:8080
+    description: Local dev server
+security:
+        - SessionAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/equipment:
+    get:
+      summary: List equipment
+      operationId: listEquipment
+      responses:
+        '200':
+          description: Equipment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Equipment'
+    post:
+      summary: Create equipment
+      operationId: createEquipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EquipmentCreateRequest'
+      responses:
+        '201':
+          description: Equipment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Equipment'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Duplicate asset name or serial number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/equipment/{id}:
+    put:
+      summary: Update equipment
+      operationId: updateEquipment
+      parameters:
+        - $ref: '#/components/parameters/EquipmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EquipmentUpdateRequest'
+      responses:
+        '200':
+          description: Equipment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Equipment'
+        '404':
+          description: Equipment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete equipment
+      operationId: deleteEquipment
+      parameters:
+        - $ref: '#/components/parameters/EquipmentId'
+      responses:
+        '200':
+          description: Equipment deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Equipment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/import:
+    post:
+      summary: Import equipment data from CSV
+      operationId: importEquipment
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Import completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+
+  /api/v1/borrow-requests:
+    get:
+      summary: List borrow requests
+      operationId: listBorrowRequests
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: equipment_id
+          in: query
+          schema:
+            type: integer
+        - name: borrower_name
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Borrow request list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BorrowRequest'
+    post:
+      summary: Create borrow request
+      operationId: createBorrowRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorrowRequestCreateRequest'
+      responses:
+        '201':
+          description: Borrow request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorrowRequest'
+        '404':
+          description: Equipment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Equipment unavailable or already requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid borrow type, missing return date, or missing borrower name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden for non-user roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/borrow-requests/{id}:
+    get:
+      summary: Get borrow request by id
+      operationId: getBorrowRequest
+      parameters:
+        - $ref: '#/components/parameters/BorrowRequestId'
+      responses:
+        '200':
+          description: Borrow request found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorrowRequest'
+        '404':
+          description: Borrow request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/borrow-requests/{id}/approve:
+    put:
+      summary: Approve borrow request
+      operationId: approveBorrowRequest
+      parameters:
+        - $ref: '#/components/parameters/BorrowRequestId'
+      responses:
+        '200':
+          description: Borrow request approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorrowRequest'
+        '404':
+          description: Borrow request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Borrow request already approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/borrow-requests/{id}/reject:
+    put:
+      summary: Reject borrow request
+      operationId: rejectBorrowRequest
+      parameters:
+        - $ref: '#/components/parameters/BorrowRequestId'
+      responses:
+        '200':
+          description: Borrow request rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorrowRequest'
+        '404':
+          description: Borrow request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Borrow request not pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/borrow-requests/{id}/return:
+    post:
+      summary: Return borrow request
+      operationId: returnBorrowRequest
+      parameters:
+        - $ref: '#/components/parameters/BorrowRequestId'
+      responses:
+        '200':
+          description: Return requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorrowRequest'
+        '404':
+          description: Borrow request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Borrow request not returnable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/borrow-requests/{id}/confirm-return:
+    put:
+      summary: Confirm return of borrow request
+      operationId: confirmReturnBorrowRequest
+      parameters:
+        - $ref: '#/components/parameters/BorrowRequestId'
+      responses:
+        '200':
+          description: Return confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BorrowRequest'
+        '404':
+          description: Borrow request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Borrow request not pending return
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/repair-tickets:
+    get:
+      summary: List repair tickets
+      operationId: listRepairTickets
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: equipment_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Repair tickets list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RepairTicket'
+    post:
+      summary: Create repair ticket
+      operationId: createRepairTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepairTicketCreateRequest'
+      responses:
+        '201':
+          description: Repair ticket created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairTicket'
+        '404':
+          description: Equipment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Equipment decommissioned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/repair-tickets/{id}:
+    get:
+      summary: Get repair ticket by id
+      operationId: getRepairTicket
+      parameters:
+        - $ref: '#/components/parameters/RepairTicketId'
+      responses:
+        '200':
+          description: Repair ticket found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairTicket'
+        '404':
+          description: Repair ticket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/repair-tickets/{id}/status:
+    put:
+      summary: Update repair ticket status
+      operationId: updateRepairTicketStatus
+      parameters:
+        - $ref: '#/components/parameters/RepairTicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepairTicketStatusUpdateRequest'
+      responses:
+        '200':
+          description: Repair ticket status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairTicket'
+        '404':
+          description: Repair ticket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Repair ticket already closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/dashboard:
+    get:
+      summary: Get dashboard KPI data
+      operationId: getDashboard
+      responses:
+        '200':
+          description: Dashboard KPI data (fields returned depend on caller's role)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+
+  /api/v1/reports:
+    get:
+      summary: Get reports
+      operationId: getReports
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [stock, borrow, return, repair]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Reports data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/activity-logs:
+    get:
+      summary: List activity logs
+      operationId: listActivityLogs
+      responses:
+        '200':
+          description: Activity logs list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityLog'
+
+components:
+  parameters:
+    EquipmentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    BorrowRequestId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    RepairTicketId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  securitySchemes:
+      SessionAuth:
+        type: apiKey
+        in: header
+        name: X-Session-User
+      
+  schemas:
+    DashboardResponse:
+      type: object
+      description: >
+        System Admin เห็น: total_equipment, equipment_in_use, equipment_under_repair, equipment_below_minimum
+        Admin เห็น: total_equipment, pending_borrow_requests, pending_return_confirmations, pending_repair_tickets, equipment_below_minimum
+        User เห็น (scope เฉพาะของตัวเอง): pending_borrow_requests, successful_borrows, under_repair, in_progress_requests
+      properties:
+        total_equipment:
+          type: integer
+        equipment_in_use:
+          type: integer
+        equipment_under_repair:
+          type: integer
+        equipment_below_minimum:
+          type: integer
+        pending_borrow_requests:
+          type: integer
+        pending_return_confirmations:
+          type: integer
+        pending_repair_tickets:
+          type: integer
+        successful_borrows:
+          type: integer
+        in_progress_requests:
+          type: integer
+    EquipmentType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        min_quantity:
+          type: integer
+      required:
+        - id
+        - name
+        - min_quantity
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    Equipment:
+      type: object
+      properties:
+        id:
+          type: integer
+        asset_name:
+          type: string
+        asset_serial_no:
+          type: string
+        type_id:
+          type: integer
+        asset_state:
+          type: string
+      required:
+        - id
+        - asset_name
+        - asset_serial_no
+        - type_id
+        - asset_state
+
+    EquipmentCreateRequest:
+      type: object
+      properties:
+        asset_name:
+          type: string
+        asset_serial_no:
+          type: string
+        type_id:
+          type: integer
+      required:
+        - asset_name
+        - asset_serial_no
+        - type_id
+
+    EquipmentUpdateRequest:
+      type: object
+      properties:
+        asset_name:
+          type: string
+        asset_serial_no:
+          type: string
+        type_id:
+          type: integer
+        asset_state:
+          type: string
+
+    ImportResult:
+      type: object
+      properties:
+        total:
+          type: integer
+        success:
+          type: integer
+        failed:
+          type: integer
+      required:
+        - total
+        - success
+        - failed
+
+    BorrowRequest:
+      properties:
+        id: {type: integer}
+        equipment_id: {type: integer}
+        created_by_user_id: {type: integer}
+        borrower_name: {type: string}
+        borrow_type: {type: string}
+        return_date: {type: string, format: date}
+        status: {type: string}
+        approved_by: {type: integer}
+        returned_at: {type: string, format: date-time}
+      required:
+        - id
+        - equipment_id
+        - created_by_user_id
+        - borrower_name
+        - borrow_type
+        - status
+
+    BorrowRequestCreateRequest:
+      properties:
+        equipment_id: {type: integer}
+        borrow_type: {type: string}
+        return_date: {type: string, format: date}
+        borrower_name: {type: string}
+      required:
+        - equipment_id
+        - borrow_type
+        - borrower_name
+
+    RepairTicket:
+      type: object
+      properties:
+        id:
+          type: integer
+        equipment_id:
+          type: integer
+        reporter_id:
+          type: integer
+        issue_description:
+          type: string
+        urgency:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - equipment_id
+        - reporter_id
+        - status
+
+    RepairTicketCreateRequest:
+      type: object
+      properties:
+        equipment_id:
+          type: integer
+        issue_description:
+          type: string
+        urgency:
+          type: string
+      required:
+        - equipment_id
+        - issue_description
+        - urgency
+
+    RepairTicketStatusUpdateRequest:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: integer
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - user_id
+        - action
+        - resource_type
+        - resource_id
+        - created_at
