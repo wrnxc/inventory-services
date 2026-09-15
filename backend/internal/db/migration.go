@@ -11,9 +11,9 @@ import (
 
 // Config captures the database settings used by the migration layer.
 type Config struct {
-	DSN string
-	MaxOpenConns int
-	MaxIdleConns int
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 }
 
@@ -54,8 +54,12 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS users (
 			id SERIAL PRIMARY KEY,
 			username TEXT NOT NULL UNIQUE CHECK (length(trim(username)) > 0),
+			password_hash TEXT NOT NULL DEFAULT '',
+			is_active BOOLEAN NOT NULL DEFAULT TRUE,
 			role TEXT NOT NULL CHECK (role IN ('system_admin', 'admin', 'user'))
 		)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
 		`CREATE TABLE IF NOT EXISTS equipment_types (
 			id SERIAL PRIMARY KEY,
 			name TEXT NOT NULL UNIQUE CHECK (length(trim(name)) > 0),
@@ -64,7 +68,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS equipment (
 			id SERIAL PRIMARY KEY,
 			type_id INTEGER NOT NULL REFERENCES equipment_types(id),
-			product_name VARCHAR(255),
+			product_name VARCHAR(255) NOT NULL CHECK (length(trim(product_name)) > 0),
 			asset_name VARCHAR(255) UNIQUE NOT NULL CHECK (length(trim(asset_name)) > 0),
 			asset_tag VARCHAR(255),
 			asset_serial_no VARCHAR(100) UNIQUE,
@@ -76,12 +80,32 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 			asset_no VARCHAR(255),
 			budget VARCHAR(10),
 			remark TEXT,
+			username VARCHAR(255),
 			req_no TEXT,
 			status VARCHAR(20) NOT NULL DEFAULT 'ในคลัง'
 				CHECK (status IN ('กำลังใช้งาน', 'ในคลัง', 'เสียหาย', 'เลิกใช้งาน')),
 			created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 		)`,
+		// CREATE TABLE IF NOT EXISTS does not modify an existing equipment table.
+		// These statements bring an existing database in line with the current schema.
+		`ALTER TABLE equipment ADD COLUMN IF NOT EXISTS product_name VARCHAR(255)`,
+		`ALTER TABLE equipment
+			ALTER COLUMN product_name SET NOT NULL`,
+		`DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1
+				FROM pg_constraint
+				WHERE conname = 'equipment_product_name_not_blank'
+				  AND conrelid = 'equipment'::regclass
+			) THEN
+				ALTER TABLE equipment
+				ADD CONSTRAINT equipment_product_name_not_blank
+				CHECK (length(trim(product_name)) > 0);
+			END IF;
+		END
+		$$`,
 		`CREATE TABLE IF NOT EXISTS borrow_records (
 			id SERIAL PRIMARY KEY,
 			equipment_id INTEGER NOT NULL REFERENCES equipment(id),
@@ -126,6 +150,12 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 			metadata JSONB,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`CREATE TABLE IF NOT EXISTS sessions (
+			token TEXT PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id),
+			expires_at TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 	}
 
 	for _, statement := range statements {
@@ -134,31 +164,11 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	return SeedEquipmentTypes(ctx, db)
-}
-
-// SeedEquipmentTypes inserts the baseline equipment types used by the MVP.
-func SeedEquipmentTypes(ctx context.Context, db *sql.DB) error {
-	seedValues := []struct {
-		name         string
-		minQuantity  int
-	}{
-		{name: "Laptop", minQuantity: 5},
-		{name: "Monitor", minQuantity: 4},
-		{name: "Printer", minQuantity: 2},
-		{name: "Router", minQuantity: 3},
-		{name: "Mobile", minQuantity: 6},
+	if err := SeedEquipmentTypes(ctx, db); err != nil {
+		return err
 	}
-
-	for _, item := range seedValues {
-		if _, err := db.ExecContext(ctx, `
-			INSERT INTO equipment_types (name, min_quantity)
-			VALUES ($1, $2)
-			ON CONFLICT (name) DO NOTHING
-		`, item.name, item.minQuantity); err != nil {
-			return fmt.Errorf("seed equipment type %s: %w", item.name, err)
-		}
+	if err := SeedUsers(ctx, db); err != nil {
+		return err
 	}
-
 	return nil
 }

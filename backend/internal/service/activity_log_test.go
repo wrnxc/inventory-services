@@ -2,55 +2,15 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
-	"github.com/testcontainers/testcontainers-go"
-	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/wrnxc/inventory-service/internal/testutil"
 )
 
 func TestRecordActivityLogPersistsRequiredFields(t *testing.T) {
 	ctx := context.Background()
-	postgresContainer, err := postgrescontainer.Run(ctx,
-		"postgres:16-alpine",
-		postgrescontainer.WithDatabase("inventory_test"),
-		postgrescontainer.WithUsername("inventory"),
-		postgrescontainer.WithPassword("inventory"),
-	)
-	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
-	}
-	defer func() {
-		_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := testcontainers.TerminateContainer(postgresContainer); err != nil {
-			t.Logf("terminate postgres container: %v", err)
-		}
-	}()
-
-	connStr, err := postgresContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("get postgres connection string: %v", err)
-	}
-
-	dbConn, err := sql.Open("postgres", connStr)
-	if err != nil {
-		t.Fatalf("open postgres connection: %v", err)
-	}
-	defer dbConn.Close()
-
-	for i := 0; i < 15; i++ {
-		err = dbConn.PingContext(ctx)
-		if err == nil {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	if err != nil {
-		t.Fatalf("ping postgres after retries: %v", err)
-	}
+	dbConn := testutil.NewPostgres(t)
 
 	if _, err := dbConn.ExecContext(ctx, `
 		CREATE TABLE users (
@@ -83,13 +43,13 @@ func TestRecordActivityLogPersistsRequiredFields(t *testing.T) {
 	}
 
 	var (
-		id         int
-		userID     int
-		action     string
+		id           int
+		userID       int
+		action       string
 		resourceType string
-		resourceID int
-		metadata   string
-		createdAt  time.Time
+		resourceID   int
+		metadata     string
+		createdAt    time.Time
 	)
 	if err := dbConn.QueryRowContext(ctx, `
 		SELECT id, user_id, action, resource_type, resource_id, metadata::text, created_at

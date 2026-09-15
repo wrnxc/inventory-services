@@ -29,7 +29,7 @@ services:
       - "${PGADMIN_PORT}:80"
     volumes:
       - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
-      - ./pgadmin/pgpass:/pgpass:ro
+      - ./pgadmin/pgpass:/pgpass
     entrypoint: >
       /bin/sh -c "
       chmod 600 /pgpass;

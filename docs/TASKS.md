@@ -41,6 +41,61 @@ T-10 Test: UI checklist หน้าอุปกรณ์ (loading/error/empty/s
 T-11 Implement: React pages ดู/สร้าง/แก้ไขอุปกรณ์ ด้วย typed API client
      DoD: checklist ผ่านครบ; ข้อมูลตรงกับ backend
 
+## Phase 1.5 Local Login (แทรกหลัง T-11)
+
+T-11a Test: local login endpoint — POST /login รับ username+password,
+      ตรวจ password ด้วย bcrypt เทียบกับ password_hash ใน users table,
+      สำเร็จ → คืน session token/cookie (httpOnly + Secure + SameSite=Strict,
+      มี expiry/TTL ชัดเจน), username ไม่พบ → 401, password ผิด → 401
+      (error message ต้องเหมือนกันทุกตัวอักษรทั้งสองกรณี ป้องกัน user
+      enumeration — assert เทียบ message ตรง ๆ ใน test), account ไม่ active
+      → 403, POST /logout ล้าง session — ต้อง assert ว่า token/cookie เดิม
+      ใช้ยิง endpoint ที่ต้อง auth ซ้ำหลัง logout แล้วได้ 401 จริง (ไม่ใช่
+      แค่ endpoint คืน 200), logout โดยไม่มี session ที่ valid อยู่แล้ว
+      ต้อง idempotent (ไม่ error)
+      DoD: go test รันแล้วแดง ครอบ success/wrong-password/not-found/
+      inactive/logout-invalidates-token/logout-idempotent/error-message-
+      identical-across-401-cases
+
+T-11b Implement: POST /login, POST /logout, เพิ่ม password_hash column
+      ใน users table (migration), bcrypt hash ตอน seed/create user,
+      ออก session token เก็บใน sessions table พร้อม expiry column (TTL
+      กำหนดค่าได้ผ่าน config เช่น 24 ชม.) หรือ signed cookie ที่มี exp
+      claim, cookie ตั้ง httpOnly+Secure+SameSite=Strict เสมอ (ไม่ใช่
+      "แนะนำ" แต่บังคับ), แก้ RequireAuth middleware ให้ตรวจ token/cookie
+      แทนการอ่าน username จาก X-Session-User header ตรง ๆ, logout ต้องลบ/
+      mark-invalid session record ใน DB จริง (ไม่ใช่แค่ client ทิ้ง cookie),
+      อัปเดต test helper ของ T-04–T-10 (equipment, activity log) ที่เคย
+      จำลอง auth ผ่าน header ตรง ๆ ให้เปลี่ยนไป login ผ่าน endpoint จริงแล้ว
+      แนบ token แทน — กัน regression เงียบ ๆ
+      DoD: go test ./... ทั้ง repo ผ่าน (ไม่ใช่แค่ package auth); RequireAuth
+      ไม่เชื่อ client-supplied username อีกต่อไป; forged
+      X-Session-User header ไม่ผ่าน; login สำเร็จแล้วเรียก
+      /api/v1/equipment ผ่านได้จริง; token หลัง logout ใช้ไม่ได้จริง
+      (verify ด้วย request จริง ไม่ใช่แค่ mock)
+
+T-11c Test: UI login page (loading/error/success), เก็บ session หลัง
+      login, redirect ไปหน้าหลัก, logout เคลียร์ session และ redirect กลับ
+      /login, พยายามเข้าหน้าอื่นก่อน login ต้องถูก redirect ไป /login
+      (protected route)
+      DoD: checklist ครบ; typed API client (authClient) เท่านั้น ไม่เรียก
+      fetch ตรง; ครอบทั้ง route guard และ session persistence
+
+T-11d Implement: 
+      - src/api/authClient.js — typed client ใหม่ (login(), logout()) แยก
+        จาก equipmentClient.js ตาม pattern เดิมของโปรเจกต์
+      - src/pages/LoginPage.js — ฟอร์ม login เรียกผ่าน authClient
+      - src/routes/ProtectedRoute.js — guard เช็ค session ก่อนเข้าหน้าอื่น
+        ทั้งหมด (โฟลเดอร์ routes/ ยังไม่มีในโปรเจกต์ ต้องสร้างใหม่)
+      - แก้ App.js เพิ่ม route /login และห่อ route ที่เหลือด้วย
+        ProtectedRoute
+      - session storage: httpOnly cookie (ไม่ต้องเก็บ token ฝั่ง JS เลย)
+        หรือถ้าใช้ Authorization header ให้เก็บ token ใน memory/context
+        เท่านั้น ห้าม localStorage/sessionStorage
+      DoD: checklist ผ่านครบ; refresh หน้าเว็บแล้ว session ยังอยู่ (cookie)
+      หรือ redirect ไป login ใหม่ (token in-memory) ตามที่เลือก; เข้า URL
+      หน้า equipment ตรง ๆ โดยยังไม่ login ต้องเด้งไป /login จริง     
+
 ## Phase 3 Borrow requests
 T-12 Test: create/list/detail + duplicate protection (AC-3, AC-4, AC-2b) — role User เท่านั้นสร้างได้ (created_by_user_id auto จาก context, ไม่รับจาก body), borrower_name รับจาก request body (required, ว่างเปล่า → 422), Admin/System Admin POST → 403, equipment ไม่พบ → 404, invalid borrow type, unavailable, duplicate (รวม concurrent test เช็ค partial unique index), filter query param (status/equipment_id/borrower_name), activity_logs (AC-9)
      DoD: go test รันแล้วแดง ครอบทุกกรณี รวม 403 ของ Admin/System Admin, 422 เมื่อ borrower_name ว่าง, filter 3 ตัว, AC-9; ไม่มี test BORROWER_NOT_FOUND/requester_id/borrower_department (ตัด concept "borrower เป็น user account" ทิ้งแล้ว)

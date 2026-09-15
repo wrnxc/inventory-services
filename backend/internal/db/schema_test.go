@@ -5,16 +5,13 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/testcontainers/testcontainers-go"
-	postgrescontainer "github.com/testcontainers/testcontainers-go/modules/postgres"
 	_ "github.com/lib/pq"
+	"github.com/wrnxc/inventory-service/internal/testutil"
 )
 
 func TestDatabaseSchemaContract(t *testing.T) {
-	dbConn := setupPostgresForTest(t)
-	defer dbConn.Close()
+	dbConn := testutil.NewPostgres(t)
 
 	if err := Migrate(context.Background(), dbConn); err != nil {
 		t.Fatalf("migrate schema: %v", err)
@@ -43,52 +40,6 @@ func TestDatabaseSchemaContract(t *testing.T) {
 	assertIndexExists(t, dbConn, "one_active_borrow_per_equipment")
 
 	assertSeededEquipmentTypes(t, dbConn)
-}
-
-func setupPostgresForTest(t *testing.T) *sql.DB {
-	t.Helper()
-
-	ctx := context.Background()
-	postgresContainer, err := postgrescontainer.Run(ctx,
-		"postgres:16-alpine",
-		postgrescontainer.WithDatabase("inventory_test"),
-		postgrescontainer.WithUsername("inventory"),
-		postgrescontainer.WithPassword("inventory"),
-	)
-	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
-	}
-	t.Cleanup(func() {
-		_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := testcontainers.TerminateContainer(postgresContainer); err != nil {
-			t.Logf("terminate postgres container: %v", err)
-		}
-	})
-
-	connStr, err := postgresContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("get postgres connection string: %v", err)
-	}
-
-	dbConn, err := sql.Open("postgres", connStr)
-	if err != nil {
-		t.Fatalf("open postgres connection: %v", err)
-	}
-
-	var pingErr error
-	for i := 0; i < 15; i++ {
-		pingErr = dbConn.Ping()
-		if pingErr == nil {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	if pingErr != nil {
-		t.Fatalf("ping postgres after retries: %v", pingErr)
-	}
-
-	return dbConn
 }
 
 func checkRequiredTable(t *testing.T, dbConn *sql.DB, tableName string) {

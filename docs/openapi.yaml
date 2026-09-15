@@ -8,11 +8,12 @@ servers:
   - url: http://localhost:8080
     description: Local dev server
 security:
-        - SessionAuth: []
+  - SessionAuth: []
 
 paths:
   /health:
     get:
+      security: []
       summary: Health check
       operationId: getHealth
       responses:
@@ -22,6 +23,74 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/login:
+    post:
+      security: []
+      summary: Login with local username and password
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserResponse'
+        '401':
+          description: Invalid username or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Account inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Missing username or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/logout:
+    post:
+      security: []
+      summary: Logout current session
+      operationId: logout
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/me:
+    get:
+      summary: Get current authenticated user
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserResponse'
+        '401':
+          description: Missing, invalid, or expired session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/equipment:
     get:
@@ -83,7 +152,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Equipment'
+                $ref: '#/components/schemas/SuccessResponse'
         '404':
           description: Equipment not found
           content:
@@ -120,6 +189,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/equipment-types:
+    get:
+      summary: List equipment types
+      operationId: listEquipmentTypes
+      responses:
+        '200':
+          description: Equipment type list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EquipmentType'
 
   /api/v1/import:
     post:
@@ -557,12 +640,50 @@ components:
         type: integer
 
   securitySchemes:
-      SessionAuth:
-        type: apiKey
-        in: header
-        name: X-Session-User
+    SessionAuth:
+      type: apiKey
+      in: cookie
+      name: session_token
       
   schemas:
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+      required:
+        - username
+        - password
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum:
+            - system_admin
+            - admin
+            - user
+      required:
+        - id
+        - username
+        - role
+
+    AuthUserResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+      required:
+        - user
+
     DashboardResponse:
       type: object
       description: >
@@ -631,46 +752,224 @@ components:
       properties:
         id:
           type: integer
-        asset_name:
-          type: string
-        asset_serial_no:
-          type: string
+
         type_id:
           type: integer
-        asset_state:
+
+        type_name:
           type: string
+          description: Equipment type name from equipment_types table
+
+        product_name:
+          type: string
+
+        asset_name:
+          type: string
+
+        asset_tag:
+          type: string
+          nullable: true
+
+        asset_serial_no:
+          type: string
+          nullable: true
+
+        bar_code:
+          type: string
+          nullable: true
+
+        vendor_name:
+          type: string
+          nullable: true
+
+        location:
+          type: string
+          nullable: true
+
+        assigned_to_department:
+          type: string
+          nullable: true
+
+        site:
+          type: string
+          nullable: true
+
+        asset_no:
+          type: string
+          nullable: true
+
+        budget:
+          type: string
+          maxLength: 10
+          nullable: true
+
+        remark:
+          type: string
+          nullable: true
+
+        username:
+          type: string
+          nullable: true
+          description: UserName associated with the equipment record from inventory data
+
+        req_no:
+          type: string
+          nullable: true
+
+        status:
+          type: string
+          enum:
+            - กำลังใช้งาน
+            - ในคลัง
+            - เสียหาย
+            - เลิกใช้งาน
+
+        created_at:
+          type: string
+          format: date-time
+
+        updated_at:
+          type: string
+          format: date-time
+
       required:
         - id
-        - asset_name
-        - asset_serial_no
         - type_id
-        - asset_state
+        - type_name
+        - product_name
+        - asset_name
+        - status
+        - created_at
+        - updated_at
 
     EquipmentCreateRequest:
       type: object
       properties:
-        asset_name:
-          type: string
-        asset_serial_no:
-          type: string
         type_id:
           type: integer
+          minimum: 1
+
+        product_name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+
+        asset_name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+
+        asset_tag:
+          type: string
+
+        asset_serial_no:
+          type: string
+
+        bar_code:
+          type: string
+
+        vendor_name:
+          type: string
+
+        location:
+          type: string
+
+        assigned_to_department:
+          type: string
+
+        site:
+          type: string
+
+        asset_no:
+          type: string
+
+        budget:
+          type: string
+          maxLength: 10
+
+        remark:
+          type: string
+
+        username:
+          type: string
+          description: UserName associated with the equipment record from inventory data
+
+        req_no:
+          type: string
+
       required:
-        - asset_name
-        - asset_serial_no
         - type_id
+        - product_name
+        - asset_name
 
     EquipmentUpdateRequest:
       type: object
       properties:
-        asset_name:
-          type: string
-        asset_serial_no:
-          type: string
         type_id:
           type: integer
-        asset_state:
+          minimum: 1
+
+        product_name:
           type: string
+          minLength: 1
+          pattern: '.*\S.*'
+
+        asset_name:
+          type: string
+          minLength: 1
+          pattern: '.*\S.*'
+
+        asset_tag:
+          type: string
+
+        asset_serial_no:
+          type: string
+
+        bar_code:
+          type: string
+
+        vendor_name:
+          type: string
+
+        location:
+          type: string
+
+        assigned_to_department:
+          type: string
+
+        site:
+          type: string
+
+        asset_no:
+          type: string
+
+        budget:
+          type: string
+          maxLength: 10
+
+        remark:
+          type: string
+
+        username:
+          type: string
+          description: UserName associated with the equipment record from inventory data
+
+        req_no:
+          type: string
+
+        status:
+          type: string
+          enum:
+            - กำลังใช้งาน
+            - ในคลัง
+            - เสียหาย
+            - เลิกใช้งาน
+
+      required:
+        - type_id
+        - product_name
+        - asset_name
+        - status
 
     ImportResult:
       type: object
