@@ -86,6 +86,28 @@ func mapPostgresError(err error) error {
 	return err
 }
 
+// FindEquipmentTypeIDByName converts the Product Type name from an imported
+// inventory file (for example "Notebook") to equipment_types.id.
+func FindEquipmentTypeIDByName(ctx context.Context, db *sql.DB, name string) (int, error) {
+	var id int
+
+	err := db.QueryRowContext(ctx, `
+		SELECT id
+		FROM equipment_types
+		WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+		LIMIT 1
+	`, name).Scan(&id)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrEquipmentTypeNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
 func InsertEquipment(ctx context.Context, db *sql.DB, input EquipmentInput) (*Equipment, error) {
 	var item Equipment
 

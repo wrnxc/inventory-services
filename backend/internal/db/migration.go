@@ -150,6 +150,17 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 			metadata JSONB,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`CREATE TABLE IF NOT EXISTS import_history (
+			id SERIAL PRIMARY KEY,
+			file_name VARCHAR(255) NOT NULL,
+			total INTEGER NOT NULL DEFAULT 0 CHECK (total >= 0),
+			success INTEGER NOT NULL DEFAULT 0 CHECK (success >= 0),
+			failed INTEGER NOT NULL DEFAULT 0 CHECK (failed >= 0),
+			imported_by INTEGER NOT NULL REFERENCES users(id),
+			imported_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`ALTER TABLE import_history
+    		ADD COLUMN IF NOT EXISTS duplicate INTEGER NOT NULL DEFAULT 0`,
 		`CREATE TABLE IF NOT EXISTS sessions (
 			token TEXT PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES users(id),
